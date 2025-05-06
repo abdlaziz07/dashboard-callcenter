@@ -2,28 +2,42 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from io import BytesIO
 
 # Setup
 st.set_page_config(page_title="📞 Call Center Dashboard", layout="wide")
 st.title("📞 Dashboard Analisis Call Center")
 
-# Load Data
-df = pd.read_csv("cleaned_call_center.csv", parse_dates=['Call_timestamp'])
+# Caching data loading
+@st.cache_data
+def load_data():
+    df = pd.read_csv("cleaned_call_center.csv", parse_dates=['Call_timestamp'])
+    df['Month'] = df['Call_timestamp'].dt.to_period('M').astype(str)
+    df['Day_of_week'] = df['Call_timestamp'].dt.day_name()
+    df['Hour'] = df['Call_timestamp'].dt.hour
+    return df
 
-# Feature Engineering
-df['Month'] = df['Call_timestamp'].dt.to_period('M').astype(str)
-df['Day_of_week'] = df['Call_timestamp'].dt.day_name()
-df['Hour'] = df['Call_timestamp'].dt.hour
+df = load_data()
 
 # Sidebar Filters
 st.sidebar.header("🔍 Filter Data")
 channel_options = st.sidebar.multiselect("Pilih Channel:", options=df['Channel'].unique(), default=df['Channel'].unique())
 date_range = st.sidebar.date_input("Pilih Rentang Tanggal:", [df['Call_timestamp'].min(), df['Call_timestamp'].max()])
+
 filtered_df = df[
     (df['Channel'].isin(channel_options)) &
     (df['Call_timestamp'].dt.date >= date_range[0]) &
     (df['Call_timestamp'].dt.date <= date_range[1])
 ]
+
+# Tombol unduh hasil filter
+csv = filtered_df.to_csv(index=False).encode('utf-8')
+st.sidebar.download_button(
+    label="💾 Unduh Data yang Difilter",
+    data=csv,
+    file_name='filtered_call_center.csv',
+    mime='text/csv'
+)
 
 # === RINGKASAN DATA ===
 st.subheader("📊 Ringkasan Statistik")
@@ -35,11 +49,13 @@ fig1, ax1 = plt.subplots()
 sns.countplot(data=filtered_df, x='Csat_score', palette='Set2', ax=ax1)
 ax1.set_title('Distribusi CSAT Score')
 st.pyplot(fig1)
+st.markdown(f"➡️ **Insight:** Nilai CSAT paling sering muncul adalah `{filtered_df['Csat_score'].mode()[0]}`.")
 
 # === JUMLAH PANGGILAN PER BULAN ===
 st.subheader("📆 Jumlah Panggilan per Bulan")
 monthly_calls = filtered_df.groupby('Month').size()
 st.bar_chart(monthly_calls)
+st.markdown(f"➡️ **Insight:** Bulan dengan jumlah panggilan terbanyak adalah **{monthly_calls.idxmax()}**.")
 
 # === JUMLAH PANGGILAN PER HARI ===
 st.subheader("🗓️ Jumlah Panggilan per Hari dalam Seminggu")
@@ -48,6 +64,8 @@ fig2, ax2 = plt.subplots()
 sns.countplot(data=filtered_df, x='Day_of_week', order=order_hari, palette='muted', ax=ax2)
 ax2.set_title("Jumlah Panggilan per Hari")
 st.pyplot(fig2)
+top_day = filtered_df['Day_of_week'].value_counts().idxmax()
+st.markdown(f"➡️ **Insight:** Hari tersibuk call center adalah **{top_day}**.")
 
 # === DISTRIBUSI PANGGILAN BERDASARKAN JAM ===
 st.subheader("⏰ Distribusi Panggilan per Jam")
@@ -100,5 +118,6 @@ sns.barplot(x=top_cities.values, y=top_cities.index, palette='viridis', ax=ax9)
 ax9.set_title("Top 10 Kota")
 st.pyplot(fig9)
 
+# Footer
 st.markdown("---")
-st.markdown("📊 Dashboard ini dibangun menggunakan Streamlit, Matplotlib, dan Seaborn oleh ABDUL 'AZIZ]")
+st.markdown("📊 Dashboard ini dibangun menggunakan **Streamlit**, **Matplotlib**, dan **Seaborn** oleh **Abdul 'Aziz**")
