@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
 import seaborn as sns
 from io import BytesIO
 
@@ -9,7 +10,7 @@ st.set_page_config(page_title="📞 Call Center Dashboard", layout="wide")
 st.title("📞 Dashboard Analisis Call Center")
 
 # === 2. LOAD DATA ===
-@st.cache
+@st.cache_data
 def load_data():
     df = pd.read_csv('cleaned_call_center.csv')
     df['Call_timestamp'] = pd.to_datetime(df['Call_timestamp'])
