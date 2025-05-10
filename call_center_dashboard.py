@@ -44,7 +44,7 @@ fig_csat = px.histogram(
     title='Distribusi CSAT Score Berdasarkan Sentimen',
     labels={'Csat_score': 'CSAT Score', 'count': 'Jumlah'},
     template='plotly_white',
-    color_discrete_sequence=px.colors.qualitative.Viridis
+    color_discrete_sequence=px.colors.sequential.Viridis
 )
 st.plotly_chart(fig_csat, use_container_width=True)
 
