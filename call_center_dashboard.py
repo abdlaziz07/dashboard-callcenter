@@ -8,116 +8,146 @@ from io import BytesIO
 st.set_page_config(page_title="📞 Call Center Dashboard", layout="wide")
 st.title("📞 Dashboard Analisis Call Center")
 
-# Caching data loading
-@st.cache_data
+# === 2. LOAD DATA ===
+@st.cache
 def load_data():
-    df = pd.read_csv("cleaned_call_center.csv", parse_dates=['Call_timestamp'])
+    df = pd.read_csv('cleaned_call_center.csv')
+    df['Call_timestamp'] = pd.to_datetime(df['Call_timestamp'])
     df['Month'] = df['Call_timestamp'].dt.to_period('M').astype(str)
     df['Day_of_week'] = df['Call_timestamp'].dt.day_name()
-    df['Hour'] = df['Call_timestamp'].dt.hour
     return df
 
 df = load_data()
 
-# Sidebar Filters
-st.sidebar.header("🔍 Filter Data")
-channel_options = st.sidebar.multiselect("Pilih Channel:", options=df['Channel'].unique(), default=df['Channel'].unique())
-date_range = st.sidebar.date_input("Pilih Rentang Tanggal:", [df['Call_timestamp'].min(), df['Call_timestamp'].max()])
-
-filtered_df = df[
-    (df['Channel'].isin(channel_options)) &
-    (df['Call_timestamp'].dt.date >= date_range[0]) &
-    (df['Call_timestamp'].dt.date <= date_range[1])
-]
-
-# Tombol unduh hasil filter
-csv = filtered_df.to_csv(index=False).encode('utf-8')
-st.sidebar.download_button(
-    label="💾 Unduh Data yang Difilter",
-    data=csv,
-    file_name='filtered_call_center.csv',
-    mime='text/csv'
+# === 3. SIDEBAR FILTER ===
+st.sidebar.header("Filter Data")
+selected_channel = st.sidebar.multiselect(
+    "Pilih Channel:", options=df['Channel'].unique(), default=df['Channel'].unique()
+)
+selected_month = st.sidebar.multiselect(
+    "Pilih Bulan:", options=df['Month'].unique(), default=df['Month'].unique()
 )
 
-# === RINGKASAN DATA ===
-st.subheader("📊 Ringkasan Statistik")
-st.dataframe(filtered_df.describe())
+filtered_data = df[
+    (df['Channel'].isin(selected_channel)) & (df['Month'].isin(selected_month))
+]
 
-# === DISTRIBUSI CSAT SCORE ===
-st.subheader("🎯 Distribusi CSAT Score")
-fig1, ax1 = plt.subplots()
-sns.countplot(data=filtered_df, x='Csat_score', palette='Set2', ax=ax1)
-ax1.set_title('Distribusi CSAT Score')
-st.pyplot(fig1)
-st.markdown(f"➡️ **Insight:** Nilai CSAT paling sering muncul adalah `{filtered_df['Csat_score'].mode()[0]}`.")
+# === 4. GRAFIK INTERAKTIF ===
 
-# === JUMLAH PANGGILAN PER BULAN ===
-st.subheader("📆 Jumlah Panggilan per Bulan")
-monthly_calls = filtered_df.groupby('Month').size()
-st.bar_chart(monthly_calls)
-st.markdown(f"➡️ **Insight:** Bulan dengan jumlah panggilan terbanyak adalah **{monthly_calls.idxmax()}**.")
+# 1. Distribusi CSAT Score
+st.subheader("Distribusi CSAT Score")
+fig_csat = px.histogram(
+    filtered_data,
+    x='Csat_score',
+    color='Sentiment',
+    title='Distribusi CSAT Score Berdasarkan Sentimen',
+    labels={'Csat_score': 'CSAT Score', 'count': 'Jumlah'},
+    template='plotly_white',
+    color_discrete_sequence=px.colors.qualitative.Viridis
+)
+st.plotly_chart(fig_csat, use_container_width=True)
 
-# === JUMLAH PANGGILAN PER HARI ===
-st.subheader("🗓️ Jumlah Panggilan per Hari dalam Seminggu")
-order_hari = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-fig2, ax2 = plt.subplots()
-sns.countplot(data=filtered_df, x='Day_of_week', order=order_hari, palette='muted', ax=ax2)
-ax2.set_title("Jumlah Panggilan per Hari")
-st.pyplot(fig2)
-top_day = filtered_df['Day_of_week'].value_counts().idxmax()
-st.markdown(f"➡️ **Insight:** Hari tersibuk call center adalah **{top_day}**.")
+# 2. Jumlah Panggilan per Bulan
+st.subheader("Jumlah Panggilan per Bulan")
+monthly_calls = filtered_data['Month'].value_counts().sort_index()
+fig_monthly_calls = px.bar(
+    x=monthly_calls.index,
+    y=monthly_calls.values,
+    title='Jumlah Panggilan per Bulan',
+    labels={'x': 'Bulan', 'y': 'Jumlah Panggilan'},
+    template='plotly_white',
+    color=monthly_calls.values,
+    color_continuous_scale='Blues'
+)
+st.plotly_chart(fig_monthly_calls, use_container_width=True)
 
-# === DISTRIBUSI PANGGILAN BERDASARKAN JAM ===
-st.subheader("⏰ Distribusi Panggilan per Jam")
-fig3, ax3 = plt.subplots()
-sns.histplot(data=filtered_df, x='Hour', bins=24, kde=True, color='orange', ax=ax3)
-ax3.set_title("Distribusi Panggilan per Jam")
-st.pyplot(fig3)
+# 3. Jumlah Panggilan per Hari
+st.subheader("Jumlah Panggilan per Hari")
+order_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+daily_calls = filtered_data['Day_of_week'].value_counts().reindex(order_days)
+fig_daily_calls = px.bar(
+    x=daily_calls.index,
+    y=daily_calls.values,
+    title='Jumlah Panggilan per Hari',
+    labels={'x': 'Hari', 'y': 'Jumlah Panggilan'},
+    template='plotly_white',
+    color=daily_calls.values,
+    color_continuous_scale='Sunset'
+)
+st.plotly_chart(fig_daily_calls, use_container_width=True)
 
-# === JUMLAH PANGGILAN BERDASARKAN CHANNEL ===
-st.subheader("📡 Jumlah Panggilan per Channel")
-fig4, ax4 = plt.subplots()
-sns.countplot(data=filtered_df, x='Channel', palette='Set3', ax=ax4)
-ax4.set_title("Panggilan per Channel")
-st.pyplot(fig4)
+# 4. Alasan Panggilan (Top 10)
+st.subheader("Top 10 Alasan Panggilan")
+top_reasons = filtered_data['Reason'].value_counts().nlargest(10).reset_index()
+top_reasons.columns = ['Reason', 'Call Count']
+fig_top_reasons = px.bar(
+    top_reasons,
+    x='Call Count',
+    y='Reason',
+    orientation='h',
+    title='10 Alasan Panggilan Terbanyak',
+    labels={'Call Count': 'Jumlah Panggilan', 'Reason': 'Alasan'},
+    template='plotly_white',
+    color='Call Count',
+    color_continuous_scale='Cool'
+)
+st.plotly_chart(fig_top_reasons, use_container_width=True)
 
-# === RATA-RATA CSAT SCORE PER CHANNEL ===
-st.subheader("⭐ Rata-rata CSAT Score per Channel")
-fig5, ax5 = plt.subplots()
-sns.barplot(data=filtered_df, x='Channel', y='Csat_score', ci=None, palette='viridis', ax=ax5)
-ax5.set_title("Rata-rata CSAT per Channel")
-st.pyplot(fig5)
+# 5. Top 10 Kota Berdasarkan Panggilan
+st.subheader("Top 10 Kota dengan Panggilan Terbanyak")
+top_cities = filtered_data['City'].value_counts().nlargest(10).reset_index()
+top_cities.columns = ['City', 'Call Count']
+fig_top_cities = px.bar(
+    top_cities,
+    x='Call Count',
+    y='City',
+    orientation='h',
+    title='Top 10 Kota dengan Panggilan Terbanyak',
+    labels={'Call Count': 'Jumlah Panggilan', 'City': 'Kota'},
+    template='plotly_white',
+    color='Call Count',
+    color_continuous_scale='Plasma'
+)
+st.plotly_chart(fig_top_cities, use_container_width=True)
 
-# === DISTRIBUSI SENTIMEN ===
-st.subheader("💬 Distribusi Sentimen")
-fig6, ax6 = plt.subplots()
-sns.countplot(data=filtered_df, x='Sentiment', palette='RdYlGn', ax=ax6)
-ax6.set_title("Distribusi Sentimen Panggilan")
-st.pyplot(fig6)
+# 6. Rata-rata CSAT per Channel
+st.subheader("Rata-rata CSAT Score per Channel")
+fig_csat_channel = px.bar(
+    filtered_data.groupby('Channel')['Csat_score'].mean().reset_index(),
+    x='Channel',
+    y='Csat_score',
+    title='Rata-rata CSAT Score per Channel',
+    labels={'Csat_score': 'Rata-rata CSAT Score', 'Channel': 'Channel'},
+    template='plotly_white',
+    color='Csat_score',
+    color_continuous_scale='Viridis'
+)
+st.plotly_chart(fig_csat_channel, use_container_width=True)
 
-# === DURASI PANGGILAN vs CSAT ===
-st.subheader("📞 Durasi Panggilan vs CSAT Score")
-fig7, ax7 = plt.subplots()
-sns.boxplot(data=filtered_df, x='Csat_score', y='Call duration in minutes', palette='pastel', ax=ax7)
-ax7.set_title("Durasi vs CSAT")
-st.pyplot(fig7)
+# 7. Distribusi Response Time
+st.subheader("Distribusi Response Time")
+fig_response_time = px.histogram(
+    filtered_data,
+    x='Response_time',
+    title='Distribusi Response Time',
+    labels={'Response_time': 'Response Time', 'count': 'Jumlah'},
+    template='plotly_white',
+    color_discrete_sequence=['#636EFA']
+)
+st.plotly_chart(fig_response_time, use_container_width=True)
 
-# === ALASAN PANGGILAN TERBANYAK ===
-st.subheader("📋 10 Alasan Panggilan Terbanyak")
-top_reasons = filtered_df['Reason'].value_counts().nlargest(10)
-fig8, ax8 = plt.subplots()
-sns.barplot(x=top_reasons.values, y=top_reasons.index, palette='coolwarm', ax=ax8)
-ax8.set_title("Top 10 Alasan Panggilan")
-st.pyplot(fig8)
-
-# === TOP 10 KOTA ===
-st.subheader("📍 10 Kota dengan Jumlah Panggilan Terbanyak")
-top_cities = filtered_df['City'].value_counts().nlargest(10)
-fig9, ax9 = plt.subplots()
-sns.barplot(x=top_cities.values, y=top_cities.index, palette='viridis', ax=ax9)
-ax9.set_title("Top 10 Kota")
-st.pyplot(fig9)
-
+# 8. Durasi Panggilan vs CSAT Score
+st.subheader("Durasi Panggilan Berdasarkan CSAT Score")
+fig_call_duration = px.box(
+    filtered_data,
+    x='Csat_score',
+    y='Call duration in minutes',
+    title='Durasi Panggilan vs CSAT Score',
+    labels={'Csat_score': 'CSAT Score', 'Call duration in minutes': 'Durasi Panggilan (menit)'},
+    template='plotly_white',
+    color='Csat_score'
+)
+st.plotly_chart(fig_call_duration, use_container_width=True)
 # Footer
 st.markdown("---")
 st.markdown("📊 Dashboard ini dibangun menggunakan **Streamlit**, **Matplotlib**, dan **Seaborn** oleh **Abdul 'Aziz**")
