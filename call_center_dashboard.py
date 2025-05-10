@@ -1,87 +1,65 @@
-import streamlit as st
+# call_center_dashboard.py
 import pandas as pd
+import streamlit as st
 import plotly.express as px
 
-# === Load Data ===
+# Load cleaned data
 df = pd.read_csv('cleaned_call_center.csv')
 df['Call_timestamp'] = pd.to_datetime(df['Call_timestamp'])
-
-# Feature Engineering
-df['Month'] = df['Call_timestamp'].dt.to_period('M').astype(str)
+df['Day'] = df['Call_timestamp'].dt.day
 df['Day_of_week'] = df['Call_timestamp'].dt.day_name()
 
-# === Streamlit App ===
-st.set_page_config(page_title="Call Center Dashboard", layout="wide")
-st.title("📞 Call Center Analysis Dashboard")
+# Streamlit Layout
+st.set_page_config(page_title="Dashboard Call Center", layout="wide")
+st.title("📞 Dashboard Analisis Call Center")
 st.markdown("""
-Dashboard ini menampilkan analisis performa layanan call center berdasarkan data panggilan, sentimen pelanggan, dan kanal layanan.
+Dashboard ini menyajikan analisis interaktif terhadap data panggilan call center, termasuk distribusi skor CSAT,
+channel layanan, alasan panggilan, serta durasi dan respon waktu.
 """)
 
-# Sidebar filter
-st.sidebar.header("Filter")
-selected_channel = st.sidebar.selectbox("Pilih Channel", options=['All'] + sorted(df['Channel'].unique().tolist()))
-selected_sentiment = st.sidebar.selectbox("Pilih Sentiment", options=['All'] + sorted(df['Sentiment'].unique().tolist()))
+# Sidebar filters
+with st.sidebar:
+    st.header("🔍 Filter Data")
+    selected_channel = st.selectbox("Pilih Channel:", options=df['Channel'].unique())
+    selected_sentiment = st.multiselect("Pilih Sentimen:", options=df['Sentiment'].unique(), default=df['Sentiment'].unique())
 
-# Filter Data
-filtered_df = df.copy()
-if selected_channel != 'All':
-    filtered_df = filtered_df[filtered_df['Channel'] == selected_channel]
-if selected_sentiment != 'All':
-    filtered_df = filtered_df[filtered_df['Sentiment'] == selected_sentiment]
+# Filter data
+filtered_df = df[(df['Channel'] == selected_channel) & (df['Sentiment'].isin(selected_sentiment))]
 
-# Layout 2 Kolom
-col1, col2 = st.columns(2)
-
-# Distribusi CSAT Score
-with col1:
-    st.subheader("📊 Distribusi CSAT Score")
-    fig_csat = px.histogram(filtered_df, x='Csat_score', color='Csat_score', nbins=10)
-    st.plotly_chart(fig_csat, use_container_width=True)
-
-# Distribusi Sentimen
-with col2:
-    st.subheader("😊 Distribusi Sentimen")
-    fig_sentiment = px.histogram(filtered_df, x='Sentiment', color='Sentiment')
-    st.plotly_chart(fig_sentiment, use_container_width=True)
-
-# Jumlah Panggilan per Bulan
-st.subheader("🗓️ Jumlah Panggilan per Bulan")
-monthly_calls = filtered_df.groupby('Month').size().reset_index(name='Jumlah')
-fig_monthly = px.bar(monthly_calls, x='Month', y='Jumlah')
-st.plotly_chart(fig_monthly, use_container_width=True)
-
-# Jumlah Panggilan per Hari
-st.subheader("📆 Jumlah Panggilan per Hari")
+# 1. Jumlah Panggilan per Hari dalam Seminggu
+st.subheader("📅 Jumlah Panggilan per Hari dalam Seminggu")
 order_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-day_calls = filtered_df['Day_of_week'].value_counts().reindex(order_days).reset_index()
-day_calls.columns = ['Hari', 'Jumlah']
-fig_days = px.bar(day_calls, x='Hari', y='Jumlah')
-st.plotly_chart(fig_days, use_container_width=True)
+day_data = filtered_df['Day_of_week'].value_counts().reindex(order_days)
+fig1 = px.bar(x=day_data.index, y=day_data.values, labels={'x':'Hari', 'y':'Jumlah Panggilan'}, color=day_data.index)
+st.plotly_chart(fig1, use_container_width=True)
 
-# Alasan Panggilan Terbanyak (Adaptif)
-st.subheader("🔍 Alasan Panggilan Terbanyak")
+# 2. Alasan Panggilan Terbanyak
+st.subheader("❓ Alasan Panggilan Terbanyak")
 top_reasons = filtered_df['Reason'].value_counts().nlargest(10)
-if len(top_reasons) < 3:
-    st.warning("Data terlalu sedikit untuk menampilkan 10 alasan terbanyak berdasarkan filter. Menampilkan data global.")
-    top_reasons = df['Reason'].value_counts().nlargest(10)
-fig_reason = px.bar(
-    x=top_reasons.values,
-    y=top_reasons.index,
-    orientation='h',
-    labels={'x': 'Jumlah Panggilan', 'y': 'Alasan'},
-    title='10 Alasan Panggilan Terbanyak'
-)
-st.plotly_chart(fig_reason, use_container_width=True)
+fig2 = px.bar(x=top_reasons.values, y=top_reasons.index, orientation='h', labels={'x':'Jumlah Panggilan', 'y':'Alasan'}, color=top_reasons.index)
+st.plotly_chart(fig2, use_container_width=True)
 
-# Rata-rata CSAT per Channel
-st.subheader("📺 Rata-rata CSAT per Channel")
-csat_channel = filtered_df.groupby('Channel')['Csat_score'].mean().reset_index()
-fig_csat_channel = px.bar(csat_channel, x='Channel', y='Csat_score', color='Channel')
-st.plotly_chart(fig_csat_channel, use_container_width=True)
+# 3. Distribusi Sentimen
+st.subheader("💬 Distribusi Sentimen")
+fig3 = px.histogram(filtered_df, x='Sentiment', color='Sentiment', category_orders={'Sentiment': ['Very Negative', 'Negative', 'Neutral', 'Positive', 'Very Positive']})
+st.plotly_chart(fig3, use_container_width=True)
 
-# Durasi Panggilan berdasarkan CSAT
-st.subheader("⏱️ Durasi Panggilan vs CSAT")
-fig_duration = px.box(filtered_df, x='Csat_score', y='Call duration in minutes', points='all')
-st.plotly_chart(fig_duration, use_container_width=True)
+# 4. Rata-rata CSAT Score per Channel
+st.subheader("📊 Rata-rata CSAT Score per Channel")
+avg_csat = df.groupby('Channel')['Csat_score'].mean().reset_index()
+fig4 = px.bar(avg_csat, x='Channel', y='Csat_score', color='Channel')
+st.plotly_chart(fig4, use_container_width=True)
 
-st.caption("Dashboard dibuat oleh Abdul 'Aziz")
+# 5. Durasi Panggilan vs CSAT Score
+st.subheader("⏱️ Durasi Panggilan berdasarkan CSAT Score")
+fig5 = px.box(filtered_df, x='Csat_score', y='Call duration in minutes', points='all', color='Csat_score')
+st.plotly_chart(fig5, use_container_width=True)
+
+# 6. Distribusi Response Time
+st.subheader("⏱️ Distribusi Response Time")
+fig6 = px.histogram(filtered_df, x='Response_time', color='Response_time')
+st.plotly_chart(fig6, use_container_width=True)
+
+# Footer
+st.markdown("---")
+st.caption("Dibuat oleh Abdul 'Aziz | Analisis Data Call Center")
